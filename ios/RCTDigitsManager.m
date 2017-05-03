@@ -111,6 +111,12 @@ RCT_EXPORT_METHOD(logout) {
     [[Digits sharedInstance] logOut];
 }
 
+RCT_EXPORT_METHOD(enableSandbox) {
+    Digits *digits = [Digits sharedInstance];
+    DGTSession *session = [DGTDebugConfiguration defaultDebugSession];
+    digits.debugOverrides = [[DGTDebugConfiguration alloc] initSuccessStateWithDigitsSession:session];
+}
+
 RCT_EXPORT_METHOD(sessionDetails:(RCTResponseSenderBlock)callback) {
     DGTSession* session =[[Digits sharedInstance] session];
     if (session) {
@@ -134,5 +140,54 @@ RCT_EXPORT_METHOD(sessionDetails:(RCTResponseSenderBlock)callback) {
         callback(@[[NSNull null], [NSNull null]]);
     }
 }
+
+RCT_EXPORT_METHOD(uploadContacts:(RCTResponseSenderBlock)callback) {
+    DGTSession *userSession = [Digits sharedInstance].session;
+    DGTContacts *contacts = [[DGTContacts alloc] initWithUserSession:userSession];
+    
+    [contacts startContactsUploadWithCompletion:^(DGTContactsUploadResult *result, NSError *error) {
+        // Inspect results and error objects to determine if upload succeeded.
+        if (error) {
+            callback(@[[error localizedDescription], [NSNull null]]);
+        } else if (!result) {
+            callback(@[[NSNull null], [NSNull null]]);
+        } else {
+            callback(@[[NSNull null], @{
+                           @"totalContacts": [NSNumber numberWithInteger:result.totalContacts],
+                           @"numberOfUploadedContacts": [NSNumber numberWithInteger:result.numberOfUploadedContacts]
+                           }]);
+        }
+    }];
+}
+
+RCT_EXPORT_METHOD(findFriends:(NSString *)cursor callback:(RCTResponseSenderBlock)callback) {
+    DGTSession *userSession = [Digits sharedInstance].session;
+    DGTContacts *contacts = [[DGTContacts alloc] initWithUserSession:userSession];
+    
+    [contacts lookupContactMatchesWithCursor:cursor completion:^(NSArray *matches, NSString *nextCursor, NSError *error) {
+        // matches is an Array of DGTUser objects.
+        // Use nextCursor in a follow-up call to this method to offset the results.
+        if (error) {
+            callback(@[[error localizedDescription], [NSNull null]]);
+        } else {
+            
+            NSMutableArray *friends = [NSMutableArray arrayWithCapacity:[matches count]];
+            [matches enumerateObjectsUsingBlock:^(DGTUser* user, NSUInteger idx, BOOL *stop) {
+                [friends addObject:@{
+                                     @"userID": user.userID
+                                     }];
+            }];
+            
+            NSMutableDictionary *result = [[NSMutableDictionary alloc] init];
+            result[@"matches"] = friends;
+            if (nextCursor) {
+                result[@"nextCursor"] = nextCursor;
+            }
+            
+            callback(@[[NSNull null], result]);
+        }
+    }];
+}
+
 
 @end
